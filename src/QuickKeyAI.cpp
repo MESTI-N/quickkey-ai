@@ -97,7 +97,8 @@ OfxStatus describeContext(OfxImageEffectHandle e) {
               kOfxParamStringIsFilePath,"Choose the original clip file, not timeline effects.");
  defineString(set,kEngine,"CorridorKey engine executable",
               kOfxParamStringIsFilePath,
-              "Choose the 'corridorkey' engine executable inside the separately installed Mac desktop app.");
+              "Choose the 'corridorkey' engine executable inside the separately installed Mac desktop app.",
+              "/Applications/CorridorKey.app/Contents/Resources/engine/corridorkey");
  defineString(set,kCache,"Output cache folder",
               kOfxParamStringIsDirectoryPath,"Choose a writable output folder unique to this shot.");
  defineDouble(set,kDespill,"Despill strength",0.5,0.0,1.0);
