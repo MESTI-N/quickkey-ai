@@ -277,7 +277,7 @@ OfxStatus entry(const char* action,const void* h,OfxPropertySetHandle in,OfxProp
  if(!effects || !props || !parameters)return kOfxStatErrMissingHostFeature;
  if(!std::strcmp(action,kOfxActionDescribe))return describe((OfxImageEffectHandle)h);
  if(!std::strcmp(action,kOfxImageEffectActionDescribeInContext))return describeContext((OfxImageEffectHandle)h);
- if(!std::strcmp(action,kOfxImageEffectActionInstanceChanged))return onChanged((OfxImageEffectHandle)h,in);
+ if(!std::strcmp(action,kOfxActionInstanceChanged))return onChanged((OfxImageEffectHandle)h,in);
  if(!std::strcmp(action,kOfxImageEffectActionRender))return render((OfxImageEffectHandle)h,in);
  return kOfxStatReplyDefault;
 }
