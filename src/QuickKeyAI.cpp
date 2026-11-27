@@ -73,6 +73,7 @@ void defineDouble(OfxParamSetHandle set,const char* key,const char* label,double
  props->propSetDouble(ps,kOfxParamPropMax,0,hi);
  props->propSetDouble(ps,kOfxParamPropDisplayMin,0,lo);
  props->propSetDouble(ps,kOfxParamPropDisplayMax,0,hi);
+ if(!std::strcmp(key,kRevision)) props->propSetInt(ps,kOfxParamPropSecret,0,1);
 }
 OfxStatus describe(OfxImageEffectHandle e) {
  OfxPropertySetHandle p=nullptr;
