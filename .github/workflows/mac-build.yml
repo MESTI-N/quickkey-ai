@@ -1,9 +1,10 @@
-name: Build QuickKey Mac OFX alpha foundation
+name: Build QuickKey AI OpenFX for Apple Silicon
 on:
   workflow_dispatch:
   push:
     paths:
       - 'src/**'
+      - 'scripts/**'
       - 'CMakeLists.txt'
       - 'Info.plist.in'
       - '.github/workflows/mac-build.yml'
@@ -13,10 +14,13 @@ jobs:
     steps:
       - name: Checkout QuickKey source
         uses: actions/checkout@v4
-      - name: Fetch official OpenFX SDK
+      - name: Fetch OpenFX SDK and EXR decoder
         run: |
           mkdir -p third_party
           git clone --depth 1 https://github.com/AcademySoftwareFoundation/openfx.git third_party/openfx
+          git clone --depth 1 --branch release https://github.com/syoyo/tinyexr.git third_party/tinyexr
+      - name: Static tests
+        run: python3 scripts/test_static.py
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
       - name: Build
@@ -25,19 +29,21 @@ jobs:
         run: |
           file build/bundles/QuickKeyAI.ofx.bundle/Contents/MacOS/QuickKeyAI.ofx
           lipo -info build/bundles/QuickKeyAI.ofx.bundle/Contents/MacOS/QuickKeyAI.ofx
-      - name: Ad hoc sign
-        run: codesign --force --sign - --timestamp=none build/bundles/QuickKeyAI.ofx.bundle/Contents/MacOS/QuickKeyAI.ofx
+      - name: Ad hoc sign plugin
+        run: |
+          codesign --force --sign - --timestamp=none build/bundles/QuickKeyAI.ofx.bundle/Contents/MacOS/QuickKeyAI.ofx
+          codesign --verify build/bundles/QuickKeyAI.ofx.bundle/Contents/MacOS/QuickKeyAI.ofx
       - name: Package Mac installer (unsigned)
         run: |
           mkdir -p pkgroot/Library/OFX/Plugins dist
           cp -R build/bundles/QuickKeyAI.ofx.bundle pkgroot/Library/OFX/Plugins/
           pkgbuild --root pkgroot --install-location / \
-            --identifier org.quickkeyai.mac.foundation --version 0.1 \
-            dist/QuickKeyAI-Foundation-unsigned.pkg
-          ditto -c -k --keepParent build/bundles/QuickKeyAI.ofx.bundle dist/QuickKeyAI-Foundation-bundle.zip
+            --identifier org.quickkeyai.mac.ai --version 0.2 \
+            dist/QuickKeyAI-V2-Native-unsigned.pkg
+          ditto -c -k --keepParent build/bundles/QuickKeyAI.ofx.bundle dist/QuickKeyAI-V2-Native-bundle.zip
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: quickkey-ai-mac-foundation
+          name: quickkey-ai-native-mac
           path: dist/*
           if-no-files-found: error
