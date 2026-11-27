@@ -21,6 +21,28 @@ jobs:
           git clone --depth 1 --branch release https://github.com/syoyo/tinyexr.git third_party/tinyexr
       - name: Static tests
         run: python3 scripts/test_static.py
+      - name: Verify worker script and output markers
+        run: |
+          bash -n scripts/quickkey-worker.sh
+          tmp="$(mktemp -d)"
+          mkdir -p "$tmp/cache"
+          printf 'test' > "$tmp/source.mov"
+          cat > "$tmp/fake-engine" <<'SH'
+          #!/bin/bash
+          set -e
+          out=""
+          while [ "$#" -gt 0 ]; do
+            if [ "$1" = "--output" ]; then out="$2"; shift 2; else shift; fi
+          done
+          mkdir -p "$out/test_cutout_exr"
+          touch "$out/test_cutout_exr/test_cutout.1001.exr"
+          SH
+          chmod +x "$tmp/fake-engine"
+          bash scripts/quickkey-worker.sh "$tmp/fake-engine" "$tmp/source.mov" "$tmp/cache" 0.5
+          test -e "$tmp/cache/.quickkey_ready"
+          test ! -e "$tmp/cache/.quickkey_running"
+          test -e "$tmp/cache/quickkey.log"
+          rm -rf "$tmp"
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
       - name: Build
