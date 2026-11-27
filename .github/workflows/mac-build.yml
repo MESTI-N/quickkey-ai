@@ -1,0 +1,43 @@
+name: Build QuickKey Mac OFX alpha foundation
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'src/**'
+      - 'CMakeLists.txt'
+      - 'Info.plist.in'
+      - '.github/workflows/mac-build.yml'
+jobs:
+  build-mac-arm64:
+    runs-on: macos-15
+    steps:
+      - name: Checkout QuickKey source
+        uses: actions/checkout@v4
+      - name: Fetch official OpenFX SDK
+        run: |
+          mkdir -p third_party
+          git clone --depth 1 https://github.com/AcademySoftwareFoundation/openfx.git third_party/openfx
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
+      - name: Build
+        run: cmake --build build --config Release -j 2
+      - name: Inspect binary
+        run: |
+          file build/bundles/QuickKeyAI.ofx.bundle/Contents/MacOS/QuickKeyAI.ofx
+          lipo -info build/bundles/QuickKeyAI.ofx.bundle/Contents/MacOS/QuickKeyAI.ofx
+      - name: Ad hoc sign
+        run: codesign --force --sign - --timestamp=none build/bundles/QuickKeyAI.ofx.bundle/Contents/MacOS/QuickKeyAI.ofx
+      - name: Package Mac installer (unsigned)
+        run: |
+          mkdir -p pkgroot/Library/OFX/Plugins dist
+          cp -R build/bundles/QuickKeyAI.ofx.bundle pkgroot/Library/OFX/Plugins/
+          pkgbuild --root pkgroot --install-location / \
+            --identifier org.quickkeyai.mac.foundation --version 0.1 \
+            dist/QuickKeyAI-Foundation-unsigned.pkg
+          ditto -c -k --keepParent build/bundles/QuickKeyAI.ofx.bundle dist/QuickKeyAI-Foundation-bundle.zip
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: quickkey-ai-mac-foundation
+          path: dist/*
+          if-no-files-found: error
