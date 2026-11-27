@@ -29,4 +29,4 @@ set_target_properties(QuickKeyAI PROPERTIES
  POSITION_INDEPENDENT_CODE ON
  OSX_ARCHITECTURES "arm64"
 )
-target_compile_options(QuickKeyAI PRIVATE "-Wall" "-Wextra" "-Werror" "-Wno-unused-parameter")
+target_compile_options(QuickKeyAI PRIVATE "-Wall" "-Wextra" "-Werror" "-Wno-unused-parameter" "-Wno-unused-function")
