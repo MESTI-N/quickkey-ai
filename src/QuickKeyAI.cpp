@@ -38,6 +38,8 @@ constexpr char kMode[]="display_mode";
 constexpr char kStart[]="first_timeline_frame";
 constexpr char kDespill[]="despill_strength";
 constexpr char kRefresh[]="refresh_output";
+constexpr char kStatus[]="ai_status";
+constexpr char kRevision[]="cache_revision";
 
 void setHost(OfxHost* h) {host=h;}
 OfxStatus load() {
@@ -91,6 +93,7 @@ OfxStatus describeContext(OfxImageEffectHandle e) {
  props->propSetString(ps,kOfxImageEffectPropSupportedComponents,0,kOfxImageComponentRGBA);
  if(effects->clipDefine(e,kOfxImageEffectOutputClipName,&ps)!=kOfxStatOK) return kOfxStatFailed;
  props->propSetString(ps,kOfxImageEffectPropSupportedComponents,0,kOfxImageComponentRGBA);
+ props->propSetString(ps,kOfxImageEffectPropPreMultiplication,0,kOfxImagePreMultiplied);
  OfxParamSetHandle set=nullptr;
  if(effects->getParamSet(e,&set)!=kOfxStatOK) return kOfxStatFailed;
  defineString(set,kSource,"Source video (original)",
@@ -110,6 +113,9 @@ OfxStatus describeContext(OfxImageEffectHandle e) {
  props->propSetString(cp,kOfxParamPropChoiceOption,1,"AI Matte (black and white)");
  props->propSetString(cp,kOfxParamPropChoiceOption,2,"Original (no key)");
  props->propSetInt(cp,kOfxParamPropDefault,0,0);
+ defineString(set,kStatus,"AI status",kOfxParamStringIsLabel,
+              "Press Refresh Render to update status.","Not processed yet");
+ defineDouble(set,kRevision,"Cache revision",0.0,0.0,10000000.0);
  defineButton(set,kProcess,"Process Shot with AI",
               "Starts the independently installed CorridorKey engine and saves actual AI RGBA EXR frames.");
  defineButton(set,kRefresh,"Refresh Render",
@@ -136,6 +142,18 @@ int getChoice(OfxParamSetHandle set) {
    parameters->paramGetValue(h,&val);
  return val;
 }
+void setStatus(OfxParamSetHandle set,const std::string& message) {
+ OfxParamHandle h=nullptr;
+ if(parameters->paramGetHandle(set,kStatus,&h,nullptr)==kOfxStatOK)
+  parameters->paramSetValue(h,message.c_str());
+}
+void bumpRevision(OfxParamSetHandle set) {
+ OfxParamHandle h=nullptr;
+ if(parameters->paramGetHandle(set,kRevision,&h,nullptr)==kOfxStatOK) {
+   double val=0;parameters->paramGetValue(h,&val);
+   parameters->paramSetValue(h,val+1.0);
+ }
+}
 std::string workerPath() {
  uint32_t size=0; _NSGetExecutablePath(nullptr,&size);
  std::vector<char> buffer(size+1);
@@ -146,13 +164,19 @@ void launchWorker(OfxImageEffectHandle e) {
  OfxParamSetHandle set=nullptr;
  if(effects->getParamSet(e,&set)!=kOfxStatOK)return;
  auto source=getString(set,kSource),engine=getString(set,kEngine),cache=getString(set,kCache);
- if(source.empty() || engine.empty() || cache.empty())return;
+ if(source.empty() || engine.empty() || cache.empty()){
+  setStatus(set,"Choose Source video, AI engine, and cache folder first.");
+  return;
+ }
  const std::string worker=workerPath();
- if(!fs::exists(worker) || !fs::exists(engine) || !fs::exists(source))return;
+ if(!fs::exists(worker) || !fs::exists(engine) || !fs::exists(source)) {
+   setStatus(set,"Missing worker, video file, or AI engine. Check file paths.");
+   return;
+ }
  std::error_code ec;fs::create_directories(cache,ec);
- if(ec)return;
+ if(ec){setStatus(set,"Cannot create output cache folder.");return;}
  std::string running=(fs::path(cache)/".quickkey_running").string();
- if(fs::exists(running))return;
+ if(fs::exists(running)){setStatus(set,"Already processing. Check quickkey.log.");return;}
  auto despill=std::to_string(getDouble(set,kDespill,0.5));
  // posix_spawn invokes a dedicated script; AI never runs in an OFX frame-render callback.
  pid_t pid=0;
@@ -160,13 +184,31 @@ void launchWorker(OfxImageEffectHandle e) {
  char* const argv[]={const_cast<char*>(shell),const_cast<char*>(worker.c_str()),
   const_cast<char*>(engine.c_str()),const_cast<char*>(source.c_str()),
   const_cast<char*>(cache.c_str()),const_cast<char*>(despill.c_str()),nullptr};
- posix_spawn(&pid,shell,nullptr,nullptr,argv,environ);
+ int status=posix_spawn(&pid,shell,nullptr,nullptr,argv,environ);
+ if(status==0) setStatus(set,"AI job started. Inspect quickkey.log, then press Refresh Render.");
+ else setStatus(set,"Unable to start AI process (macOS error "+std::to_string(status)+").");
+ bumpRevision(set);
 }
 OfxStatus onChanged(OfxImageEffectHandle e,OfxPropertySetHandle inArgs) {
  char* changed=nullptr;
  if(props->propGetString(inArgs,kOfxPropName,0,&changed)!=kOfxStatOK || !changed)
    return kOfxStatReplyDefault;
  if(!std::strcmp(changed,kProcess)) launchWorker(e);
+ if(!std::strcmp(changed,kRefresh)) {
+   OfxParamSetHandle set=nullptr;
+   if(effects->getParamSet(e,&set)==kOfxStatOK) {
+     std::string folder=getString(set,kCache);
+     if(folder.empty()) setStatus(set,"Select an output cache folder first.");
+     else if(fs::exists(fs::path(folder)/".quickkey_ready"))
+       setStatus(set,"AI render complete. Showing EXR alpha output.");
+     else if(fs::exists(fs::path(folder)/".quickkey_error"))
+       setStatus(set,"AI failed. Open quickkey.log in cache folder.");
+     else if(fs::exists(fs::path(folder)/".quickkey_running"))
+       setStatus(set,"AI still processing. Check quickkey.log.");
+     else setStatus(set,"No AI output yet. Press Process Shot with AI.");
+     bumpRevision(set);
+   }
+ }
  return kOfxStatOK;
 }
 
