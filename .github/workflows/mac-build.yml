@@ -47,6 +47,20 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
       - name: Build
         run: cmake --build build --config Release -j 2
+      - name: Smoke-test macOS dynamic loader
+        run: |
+          python3 - <<'PY'
+          import ctypes
+          from pathlib import Path
+          binary = Path("build/bundles/QuickKeyAI.ofx.bundle/Contents/MacOS/QuickKeyAI.ofx")
+          print("Loading OpenFX binary:", binary)
+          plug = ctypes.CDLL(str(binary.resolve()))
+          plug.OfxGetNumberOfPlugins.restype = ctypes.c_int
+          count = plug.OfxGetNumberOfPlugins()
+          print("Exported OpenFX plugins:", count)
+          assert count == 1
+          print("macOS dlopen succeeded (Resolve host compatibility is not proven).")
+          PY
       - name: Inspect binary
         run: |
           file build/bundles/QuickKeyAI.ofx.bundle/Contents/MacOS/QuickKeyAI.ofx
